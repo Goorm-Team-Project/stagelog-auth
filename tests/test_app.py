@@ -24,9 +24,19 @@ def test_health_route():
     assert body["data"]["service"] == "auth-service"
 
 
-def test_404_route():
+def test_not_found_route():
     event = {
         "rawPath": "/unknown",
+        "requestContext": {"http": {"method": "GET"}},
+    }
+
+    result = lambda_handler(event, None)
+    assert result["statusCode"] == 404
+
+
+def test_normalize_api_prefix_not_found_without_handler_match():
+    event = {
+        "rawPath": "/api/unknown",
         "requestContext": {"http": {"method": "GET"}},
     }
 

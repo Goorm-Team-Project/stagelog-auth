@@ -48,6 +48,37 @@ def issue_refresh_token(user_id: int | str) -> str:
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
+def issue_register_token(provider: str, provider_id: str, email: str | None = None) -> str:
+    settings = load_settings()
+    if not settings.jwt_secret_key:
+        raise ValueError("JWT_SECRET_KEY is required")
+
+    now = _now()
+    payload: Dict[str, Any] = {
+        "provider": provider,
+        "provider_id": provider_id,
+        "email": email,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=10)).timestamp()),
+        "type": "register",
+    }
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+def verify_access_token(token: str) -> Dict[str, Any]:
+    settings = load_settings()
+    payload = jwt.decode(
+        token,
+        settings.jwt_secret_key,
+        algorithms=[settings.jwt_algorithm],
+        audience=settings.jwt_audience,
+        issuer=settings.jwt_issuer,
+    )
+    if payload.get("type") != "access":
+        raise jwt.InvalidTokenError("token type is not access")
+    return payload
+
+
 def verify_refresh_token(token: str) -> Dict[str, Any]:
     settings = load_settings()
     payload = jwt.decode(
@@ -60,3 +91,11 @@ def verify_refresh_token(token: str) -> Dict[str, Any]:
     if payload.get("type") != "refresh":
         raise jwt.InvalidTokenError("token type is not refresh")
     return payload
+
+
+def get_token_exp_unverified(token: str) -> int:
+    payload = jwt.decode(token, options={"verify_signature": False})
+    exp = payload.get("exp")
+    if exp is None:
+        raise ValueError("token exp is missing")
+    return int(exp)

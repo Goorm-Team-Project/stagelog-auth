@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import jwt
 
+from services.session_store import is_access_token_blacklisted
 from utils.config import load_settings
 
 
@@ -25,6 +26,12 @@ def lambda_handler(event, _context):
             issuer=settings.jwt_issuer,
         )
     except jwt.InvalidTokenError:
+        return {"isAuthorized": False}
+
+    if payload.get("type") != "access":
+        return {"isAuthorized": False}
+
+    if is_access_token_blacklisted(token):
         return {"isAuthorized": False}
 
     return {

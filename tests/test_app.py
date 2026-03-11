@@ -24,6 +24,20 @@ def test_health_route():
     assert body["data"]["service"] == "auth-service"
 
 
+def test_health_route_rest_event_shape():
+    event = {
+        "httpMethod": "GET",
+        "path": "/api/health",
+        "requestContext": {"stage": "prod"},
+    }
+
+    result = lambda_handler(event, None)
+    assert result["statusCode"] == 200
+
+    body = json.loads(result["body"])
+    assert body["success"] is True
+
+
 def test_not_found_route():
     event = {
         "rawPath": "/unknown",

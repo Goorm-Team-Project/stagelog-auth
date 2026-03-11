@@ -32,6 +32,23 @@ def _extract_bearer_token(event):
     return raw.split(" ", 1)[1].strip()
 
 
+def _extract_authorized_user_id(event) -> int | None:
+    request_context = event.get("requestContext") or {}
+    authorizer = request_context.get("authorizer") or {}
+
+    raw = authorizer.get("user_id")
+    if raw is None and isinstance(authorizer.get("lambda"), dict):
+        raw = authorizer["lambda"].get("user_id")
+
+    if raw is None:
+        return None
+
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 def _get_refresh_token(event) -> str:
     # Monolith contract: refresh token is read from cookie only.
     return _extract_cookie_value(event, "refresh_token")
@@ -65,15 +82,19 @@ def handle_refresh(event):
 
 
 def handle_keep(event):
-    token = _extract_bearer_token(event)
-    if not token:
-        return api_response(401, False, message="토큰이 없거나 형식이 잘못되었습니다.")
+    user_id = _extract_authorized_user_id(event)
 
-    try:
-        payload = verify_access_token(token)
-        user_id = int(payload.get("user_id"))
-    except jwt.InvalidTokenError:
-        return api_response(401, False, message="유효하지 않거나 만료된 토큰입니다.")
+    # Fallback for local/direct invoke without API Gateway authorizer context.
+    if user_id is None:
+        token = _extract_bearer_token(event)
+        if not token:
+            return api_response(401, False, message="토큰이 없거나 형식이 잘못되었습니다.")
+
+        try:
+            payload = verify_access_token(token)
+            user_id = int(payload.get("user_id"))
+        except jwt.InvalidTokenError:
+            return api_response(401, False, message="유효하지 않거나 만료된 토큰입니다.")
 
     try:
         user = get_user_for_keep(user_id)
@@ -103,11 +124,15 @@ def handle_logout(event):
     if not token:
         return api_response(401, False, message="토큰이 없거나 형식이 잘못되었습니다.")
 
-    try:
-        payload = verify_access_token(token)
-        user_id = int(payload.get("user_id"))
-    except jwt.InvalidTokenError:
-        return api_response(401, False, message="유효하지 않거나 만료된 토큰입니다.")
+    user_id = _extract_authorized_user_id(event)
+
+    # Fallback for local/direct invoke without API Gateway authorizer context.
+    if user_id is None:
+        try:
+            payload = verify_access_token(token)
+            user_id = int(payload.get("user_id"))
+        except jwt.InvalidTokenError:
+            return api_response(401, False, message="유효하지 않거나 만료된 토큰입니다.")
 
     try:
         # access token 즉시 무효화를 위해 블랙리스트 등록

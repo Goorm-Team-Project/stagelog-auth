@@ -17,16 +17,42 @@ ROUTES = {
 }
 
 
-def _normalize_path(raw_path: str) -> str:
-    if raw_path.startswith("/api"):
-        normalized = raw_path[4:] or "/"
-        return normalized if normalized.startswith("/") else f"/{normalized}"
+def _extract_http_method(event: dict) -> str:
+    method = event.get("requestContext", {}).get("http", {}).get("method")
+    if method:
+        return str(method).upper()
+    return str(event.get("httpMethod", "")).upper()
+
+
+def _extract_raw_path(event: dict) -> str:
+    raw_path = event.get("rawPath") or event.get("path") or "/"
+    stage = event.get("requestContext", {}).get("stage")
+
+    # REST API proxy event can include stage in path (e.g. /prod/api/auth/keep)
+    if stage:
+        stage_prefix = f"/{stage}"
+        if raw_path == stage_prefix:
+            return "/"
+        if raw_path.startswith(f"{stage_prefix}/"):
+            return raw_path[len(stage_prefix) :]
+
     return raw_path
 
 
+def _normalize_path(raw_path: str) -> str:
+    if not raw_path:
+        return "/"
+
+    if raw_path.startswith("/api"):
+        normalized = raw_path[4:] or "/"
+        return normalized if normalized.startswith("/") else f"/{normalized}"
+
+    return raw_path if raw_path.startswith("/") else f"/{raw_path}"
+
+
 def lambda_handler(event, _context):
-    method = event.get("requestContext", {}).get("http", {}).get("method", "")
-    path = _normalize_path(event.get("rawPath", ""))
+    method = _extract_http_method(event)
+    path = _normalize_path(_extract_raw_path(event))
 
     if method == "POST" and path.startswith("/auth/login/"):
         provider = path.rsplit("/", 1)[-1]

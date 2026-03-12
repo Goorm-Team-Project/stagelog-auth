@@ -25,7 +25,7 @@ def get_mysql_connection(
       - DB_NAME
       - DB_SSL_CA
     """
-    resolved_host = host or os.getenv("DB_HOST", "stagelog-db-managed.c922amcmeywm.ap-northeast-2.rds.amazonaws.com")
+    resolved_host = host or os.getenv("DB_HOST", "stagelog-db-managed-v2.c922amcmeywm.ap-northeast-2.rds.amazonaws.com")
     resolved_port = int(port or os.getenv("DB_PORT", "3306"))
     resolved_user = user or os.getenv("DB_USER", "admin")
     resolved_password = password or os.getenv("DB_PASSWORD", "")

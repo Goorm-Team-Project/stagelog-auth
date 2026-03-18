@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import logging
+import os
+
 from utils.env_loader import load_env_file
 
 load_env_file()
@@ -10,6 +13,11 @@ from handlers.login import handle_social_login
 from handlers.signup import handle_signup
 from handlers.refresh import handle_keep, handle_logout, handle_refresh
 from utils.response import api_response
+
+_LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.getLogger().setLevel(getattr(logging, _LOG_LEVEL, logging.INFO))
+logger = logging.getLogger(__name__)
+logger.setLevel(getattr(logging, _LOG_LEVEL, logging.INFO))
 
 SUPPORTED_PROVIDERS = {"kakao", "google", "naver"}
 
@@ -34,7 +42,6 @@ def _extract_raw_path(event: dict) -> str:
     raw_path = event.get("rawPath") or event.get("path") or "/"
     stage = event.get("requestContext", {}).get("stage")
 
-    # REST API proxy event can include stage in path (e.g. /prod/api/auth/keep)
     if stage:
         stage_prefix = f"/{stage}"
         if raw_path == stage_prefix:
@@ -60,19 +67,27 @@ def lambda_handler(event, _context):
     method = _extract_http_method(event)
     path = _normalize_path(_extract_raw_path(event))
 
+    logger.info("auth_api request method=%s path=%s", method, path)
+
+    handler = ROUTES.get((method, path))
+    if handler:
+        try:
+            logger.info("auth_api route_match method=%s path=%s handler=%s", method, path, getattr(handler, "__name__", "unknown"))
+            return handler(event)
+        except ValueError as exc:
+            logger.warning("auth_api value_error method=%s path=%s error=%s", method, path, exc)
+            return api_response(400, False, message=str(exc))
+        except Exception:
+            logger.exception("auth_api unhandled_exception method=%s path=%s", method, path)
+            return api_response(500, False, message="internal server error")
+
     if method == "POST" and path.startswith("/auth/login/"):
         provider = path.rsplit("/", 1)[-1]
         if provider in SUPPORTED_PROVIDERS:
+            logger.info("auth_api social_login_route provider=%s", provider)
             return handle_social_login(event, provider)
+        logger.warning("auth_api unsupported_provider path=%s provider=%s", path, provider)
         return api_response(400, False, message="unsupported provider")
 
-    handler = ROUTES.get((method, path))
-    if not handler:
-        return api_response(404, False, message=f"route not found: {method} {path}")
-
-    try:
-        return handler(event)
-    except ValueError as exc:
-        return api_response(400, False, message=str(exc))
-    except Exception:
-        return api_response(500, False, message="internal server error")
+    logger.warning("auth_api route_not_found method=%s path=%s", method, path)
+    return api_response(404, False, message=f"route not found: {method} {path}")

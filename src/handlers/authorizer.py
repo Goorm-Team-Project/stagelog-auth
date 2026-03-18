@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import jwt
+import logging
+import os
 
 from utils.env_loader import load_env_file
 from services.session_store import is_access_token_blacklisted
 from utils.config import load_settings
 
 load_env_file()
+
+_LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.getLogger().setLevel(getattr(logging, _LOG_LEVEL, logging.INFO))
+logger = logging.getLogger(__name__)
+logger.setLevel(getattr(logging, _LOG_LEVEL, logging.INFO))
 
 
 def _validate_access_token(token: str):
@@ -21,14 +28,18 @@ def _validate_access_token(token: str):
             issuer=settings.jwt_issuer,
         )
     except jwt.InvalidTokenError:
+        logger.warning("authorizer invalid_access_token")
         return None
 
     if payload.get("type") != "access":
+        logger.warning("authorizer wrong_token_type type=%s", payload.get("type"))
         return None
 
     if is_access_token_blacklisted(token):
+        logger.warning("authorizer blacklisted_access_token user_id=%s", payload.get("user_id"))
         return None
 
+    logger.info("authorizer token_valid user_id=%s", payload.get("user_id"))
     return payload
 
 
@@ -74,7 +85,6 @@ def _rest_policy(method_arn: str, context: dict | None = None) -> dict:
 
 
 def _raise_rest_unauthorized() -> None:
-    # API Gateway REST custom authorizer converts this exact error message to 401 UNAUTHORIZED.
     raise Exception("Unauthorized")
 
 
@@ -83,10 +93,12 @@ def _handle_rest_authorizer(event) -> dict:
     token = _extract_bearer_from_rest_api(event)
 
     if not token:
+        logger.warning("authorizer rest_missing_bearer method_arn=%s", method_arn)
         _raise_rest_unauthorized()
 
     payload = _validate_access_token(token)
     if payload is None:
+        logger.warning("authorizer rest_denied method_arn=%s", method_arn)
         _raise_rest_unauthorized()
 
     context = {
@@ -94,18 +106,22 @@ def _handle_rest_authorizer(event) -> dict:
         "sub": str(payload.get("sub", "")),
         "token_type": str(payload.get("type", "")),
     }
+    logger.info("authorizer rest_allow user_id=%s method_arn=%s", context["user_id"], method_arn)
     return _rest_policy(method_arn, context=context)
 
 
 def _handle_http_authorizer(event) -> dict:
     token = _extract_bearer_from_http_api(event)
     if not token:
+        logger.warning("authorizer http_missing_bearer")
         return {"isAuthorized": False}
 
     payload = _validate_access_token(token)
     if payload is None:
+        logger.warning("authorizer http_denied")
         return {"isAuthorized": False}
 
+    logger.info("authorizer http_allow user_id=%s", payload.get("user_id"))
     return {
         "isAuthorized": True,
         "context": {
@@ -117,9 +133,7 @@ def _handle_http_authorizer(event) -> dict:
 
 
 def lambda_handler(event, _context):
-    # REST API custom authorizer event contains methodArn
     if "methodArn" in event:
         return _handle_rest_authorizer(event)
 
-    # HTTP API v2 Lambda authorizer(simple response)
     return _handle_http_authorizer(event)

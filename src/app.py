@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from utils.env_loader import load_env_file
+
+load_env_file()
+
 from handlers.health import handle_health
 from handlers.jwks import handle_jwks
 from handlers.login import handle_social_login
@@ -11,7 +15,7 @@ SUPPORTED_PROVIDERS = {"kakao", "google", "naver"}
 ROUTES = {
     ("GET", "/health"): handle_health,
     ("GET", "/.well-known/jwks.json"): handle_jwks,
-    ("POST", "/auth/refresh"): handle_refresh,
+    ("POST", "/auth/login/refresh"): handle_refresh,
     ("GET", "/auth/keep"): handle_keep,
     ("POST", "/auth/logout"): handle_logout,
 }

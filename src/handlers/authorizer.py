@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import jwt
 
+from utils.env_loader import load_env_file
 from services.session_store import is_access_token_blacklisted
 from utils.config import load_settings
+
+load_env_file()
 
 
 def _validate_access_token(token: str):

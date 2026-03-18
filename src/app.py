@@ -7,6 +7,7 @@ load_env_file()
 from handlers.health import handle_health
 from handlers.jwks import handle_jwks
 from handlers.login import handle_social_login
+from handlers.signup import handle_signup
 from handlers.refresh import handle_keep, handle_logout, handle_refresh
 from utils.response import api_response
 
@@ -16,6 +17,7 @@ ROUTES = {
     ("GET", "/health"): handle_health,
     ("GET", "/.well-known/jwks.json"): handle_jwks,
     ("POST", "/auth/login/refresh"): handle_refresh,
+    ("POST", "/auth/signup"): handle_signup,
     ("GET", "/auth/keep"): handle_keep,
     ("POST", "/auth/logout"): handle_logout,
 }

@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional
 
 from services.db import get_mysql_connection
 
+UNUSABLE_PASSWORD_PREFIX = "!"
+
 
 def get_user_by_provider(provider: str, provider_id: str) -> Optional[Dict[str, Any]]:
     query = """
@@ -37,6 +39,105 @@ def user_exists(user_id: int) -> bool:
         with conn.cursor() as cur:
             cur.execute(query, (user_id,))
             return cur.fetchone() is not None
+
+
+def email_exists(email: str) -> bool:
+    query = "SELECT 1 AS ok FROM users WHERE email = %s LIMIT 1"
+    with get_mysql_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (email,))
+            return cur.fetchone() is not None
+
+
+def nickname_exists(nickname: str) -> bool:
+    query = "SELECT 1 AS ok FROM users WHERE nickname = %s LIMIT 1"
+    with get_mysql_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (nickname,))
+            return cur.fetchone() is not None
+
+
+def create_user(
+    *,
+    email: str,
+    nickname: str,
+    provider: str,
+    provider_id: str,
+    is_email_sub: bool = False,
+    is_events_notification_sub: bool = False,
+    is_posts_notification_sub: bool = False,
+) -> Dict[str, Any]:
+    insert_query = """
+    INSERT INTO users (
+      password,
+      last_login,
+      is_superuser,
+      email,
+      nickname,
+      provider,
+      provider_id,
+      created_at,
+      is_email_sub,
+      is_events_notification_sub,
+      is_posts_notification_sub,
+      is_admin,
+      exp,
+      level,
+      reliability_score,
+      is_active
+    ) VALUES (
+      %s,
+      NULL,
+      %s,
+      %s,
+      %s,
+      %s,
+      %s,
+      NOW(),
+      %s,
+      %s,
+      %s,
+      %s,
+      %s,
+      %s,
+      %s,
+      %s
+    )
+    """
+    select_query = """
+    SELECT user_id, email, nickname, level
+    FROM users
+    WHERE user_id = %s
+    LIMIT 1
+    """
+    password = f"{UNUSABLE_PASSWORD_PREFIX}lambda-social-signup"
+    with get_mysql_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                insert_query,
+                (
+                    password,
+                    False,
+                    email,
+                    nickname,
+                    provider,
+                    provider_id,
+                    bool(is_email_sub),
+                    bool(is_events_notification_sub),
+                    bool(is_posts_notification_sub),
+                    False,
+                    0,
+                    1,
+                    50,
+                    True,
+                ),
+            )
+            user_id = int(cur.lastrowid)
+            cur.execute(select_query, (user_id,))
+            row = cur.fetchone()
+            if not row:
+                raise ValueError("created user not found")
+            return row
 
 
 def get_bookmark_event_ids(user_id: int) -> List[int]:

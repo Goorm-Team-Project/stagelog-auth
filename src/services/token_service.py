@@ -93,6 +93,18 @@ def verify_refresh_token(token: str) -> Dict[str, Any]:
     return payload
 
 
+def verify_register_token(token: str) -> Dict[str, Any]:
+    settings = load_settings()
+    payload = jwt.decode(
+        token,
+        settings.jwt_secret_key,
+        algorithms=[settings.jwt_algorithm],
+    )
+    if payload.get("type") != "register":
+        raise jwt.InvalidTokenError("token type is not register")
+    return payload
+
+
 def get_token_exp_unverified(token: str) -> int:
     payload = jwt.decode(token, options={"verify_signature": False})
     exp = payload.get("exp")

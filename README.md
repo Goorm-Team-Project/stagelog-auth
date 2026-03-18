@@ -7,6 +7,8 @@ AWS API Gateway 앞단에서 인증을 중앙화하는 Lambda 기반 Auth Servic
 - `POST /api/auth/login/{provider}`
   - `provider`: `kakao | google | naver`
   - OAuth 인가 코드 교환 후 로그인 처리
+- `POST /api/auth/signup`
+  - `register_token`, `nickname`, `email` 기반 회원가입 완료
 - `POST /api/auth/refresh`
   - 쿠키의 `refresh_token`으로 access token 재발급
 - `GET /api/auth/keep`

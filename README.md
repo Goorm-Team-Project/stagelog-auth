@@ -115,6 +115,7 @@ python -m pytest -q
 `.env.example` 참고.
 
 - JWT: `JWT_*`
+- SSM cold-start config: `AUTH_SSM_PREFIXES`
 - DB: `DB_*`
 - Redis: `REDIS_*`
 - OAuth: `KAKAO_*`, `GOOGLE_*`, `NAVER_*`

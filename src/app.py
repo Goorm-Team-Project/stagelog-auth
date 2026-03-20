@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 import os
 
-from utils.env_loader import load_env_file
+from utils.env_loader import load_runtime_env
 
-load_env_file()
+load_runtime_env()
 
 from handlers.health import handle_health
 from handlers.jwks import handle_jwks

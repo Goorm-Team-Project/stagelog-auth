@@ -4,11 +4,11 @@ import jwt
 import logging
 import os
 
-from utils.env_loader import load_env_file
+from utils.env_loader import load_runtime_env
 from services.session_store import is_access_token_blacklisted
 from utils.config import load_settings
 
-load_env_file()
+load_runtime_env()
 
 _LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.getLogger().setLevel(getattr(logging, _LOG_LEVEL, logging.INFO))

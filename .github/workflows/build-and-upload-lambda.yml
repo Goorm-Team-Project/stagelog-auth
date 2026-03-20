@@ -1,7 +1,16 @@
-name: build-and-upload-auth-lambda
+name: Build And Deploy Auth Lambda
 
 on:
+  push:
+    branches:
+      - main
+      - develop
   workflow_dispatch:
+    inputs:
+      infra_ref:
+        description: stagelog-infra git ref to deploy
+        required: false
+        default: main
 
 permissions:
   id-token: write
@@ -10,12 +19,18 @@ permissions:
 env:
   AWS_REGION: ap-northeast-2
   PYTHON_VERSION: "3.12"
+  INFRA_REPOSITORY: Goorm-Team-Project/stagelog-infra
+  INFRA_WORKFLOW_FILE: deploy-auth-lambda.yml
 
 jobs:
   package-and-upload:
-    # Temporary guard: keep workflow definition in repo but prevent execution.
-    if: ${{ false }}
     runs-on: ubuntu-latest
+    outputs:
+      auth_lambda_s3_key: ${{ steps.upload.outputs.auth_lambda_s3_key }}
+      auth_lambda_s3_object_version: ${{ steps.upload.outputs.auth_lambda_s3_object_version }}
+      authorizer_lambda_s3_key: ${{ steps.upload.outputs.authorizer_lambda_s3_key }}
+      authorizer_lambda_s3_object_version: ${{ steps.upload.outputs.authorizer_lambda_s3_object_version }}
+      infra_ref: ${{ steps.infra-ref.outputs.ref }}
 
     steps:
       - name: Checkout
@@ -32,23 +47,70 @@ jobs:
           role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Build lambda package
+      - name: Resolve infra ref
+        id: infra-ref
+        run: |
+          if [ -n "${{ github.event.inputs.infra_ref || '' }}" ]; then
+            echo "ref=${{ github.event.inputs.infra_ref }}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "ref=main" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Build lambda packages
         run: |
           set -euo pipefail
           rm -rf build dist
-          mkdir -p build/python dist
+          mkdir -p build/package dist
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -t build/python
-          cp -R src/* build/python/
-          cd build/python
-          zip -r ../../dist/auth-api.zip .
+          pip install -r requirements.txt -t build/package
+          cp -R src/* build/package/
+          cp .env.example build/package/.env.example
+          (
+            cd build/package
+            zip -r ../../dist/auth-api.zip .
+          )
+          cp dist/auth-api.zip dist/authorizer.zip
 
       - name: Upload artifacts to S3
+        id: upload
         env:
           ARTIFACT_BUCKET: ${{ secrets.AUTH_LAMBDA_ARTIFACT_BUCKET }}
         run: |
           set -euo pipefail
           test -n "${ARTIFACT_BUCKET}"
-          SHA=${GITHUB_SHA}
-          aws s3 cp dist/auth-api.zip s3://${ARTIFACT_BUCKET}/auth/${SHA}/auth-api.zip
-          aws s3 cp dist/auth-api.zip s3://${ARTIFACT_BUCKET}/auth/${SHA}/authorizer.zip
+          SHA="${GITHUB_SHA}"
+
+          AUTH_KEY="auth/${SHA}/auth-api.zip"
+          AUTH_VERSION="$(aws s3api put-object --bucket "${ARTIFACT_BUCKET}" --key "${AUTH_KEY}" --body dist/auth-api.zip --query 'VersionId' --output text)"
+
+          AUTHORIZER_KEY="auth/${SHA}/authorizer.zip"
+          AUTHORIZER_VERSION="$(aws s3api put-object --bucket "${ARTIFACT_BUCKET}" --key "${AUTHORIZER_KEY}" --body dist/authorizer.zip --query 'VersionId' --output text)"
+
+          echo "auth_lambda_s3_key=${AUTH_KEY}" >> "${GITHUB_OUTPUT}"
+          echo "auth_lambda_s3_object_version=${AUTH_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "authorizer_lambda_s3_key=${AUTHORIZER_KEY}" >> "${GITHUB_OUTPUT}"
+          echo "authorizer_lambda_s3_object_version=${AUTHORIZER_VERSION}" >> "${GITHUB_OUTPUT}"
+
+  deploy-infra:
+    runs-on: ubuntu-latest
+    needs: package-and-upload
+
+    steps:
+      - name: Dispatch stagelog-infra workflow
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.INFRA_REPO_DISPATCH_TOKEN }}
+          script: |
+            const [owner, repo] = process.env.INFRA_REPOSITORY.split('/');
+            await github.rest.actions.createWorkflowDispatch({
+              owner,
+              repo,
+              workflow_id: process.env.INFRA_WORKFLOW_FILE,
+              ref: `${{ needs.package-and-upload.outputs.infra_ref }}`,
+              inputs: {
+                auth_lambda_s3_key: `${{ needs.package-and-upload.outputs.auth_lambda_s3_key }}`,
+                auth_lambda_s3_object_version: `${{ needs.package-and-upload.outputs.auth_lambda_s3_object_version }}`,
+                authorizer_lambda_s3_key: `${{ needs.package-and-upload.outputs.authorizer_lambda_s3_key }}`,
+                authorizer_lambda_s3_object_version: `${{ needs.package-and-upload.outputs.authorizer_lambda_s3_object_version }}`
+              }
+            });

@@ -123,5 +123,6 @@ python -m pytest -q
 ## 배포/인프라 연동
 
 - Lambda + API Gateway는 `stagelog-infra/1-permanent` Terraform에서 관리
-- Lambda 아티팩트는 S3 기반(`auth_lambda_s3_bucket`, `auth_lambda_s3_key`, `authorizer_lambda_s3_key`)
-- GitHub Actions 워크플로 파일은 존재하며 현재 실행 비활성화 상태
+- Lambda 함수 생성/런타임/VPC/권한은 Terraform이 bootstrap
+- Lambda 코드는 `stagelog-auth` GitHub Actions가 `aws lambda update-function-code`로 직접 배포
+- Terraform의 S3 아티팩트 변수(`auth_lambda_s3_key`, `authorizer_lambda_s3_key`)는 최초 생성용 bootstrap 용도만 유지

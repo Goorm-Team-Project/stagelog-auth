@@ -1,0 +1,9 @@
+{
+  "rawPath": "/auth/login",
+  "body": "{\"user_id\": 1}",
+  "requestContext": {
+    "http": {
+      "method": "POST"
+    }
+  }
+}

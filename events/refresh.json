@@ -1,0 +1,9 @@
+{
+  "rawPath": "/auth/refresh",
+  "body": "{\"refresh_token\": \"replace-me\"}",
+  "requestContext": {
+    "http": {
+      "method": "POST"
+    }
+  }
+}

@@ -1,0 +1,70 @@
+name: Build And Deploy Auth Lambda
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+  PYTHON_VERSION: "3.12"
+  AUTH_API_FUNCTION_NAME: stagelog-auth-api
+  AUTHORIZER_FUNCTION_NAME: stagelog-auth-authorizer
+
+jobs:
+  package-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build lambda packages
+        run: |
+          set -euo pipefail
+          rm -rf build dist
+          mkdir -p build/package dist
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -t build/package
+          cp -R src/* build/package/
+          cp .env.example build/package/.env.example
+          (
+            cd build/package
+            zip -r ../../dist/auth-api.zip .
+          )
+          cp dist/auth-api.zip dist/authorizer.zip
+
+      - name: Deploy auth API lambda code
+        run: |
+          set -euo pipefail
+          aws lambda update-function-code \
+            --function-name "${AUTH_API_FUNCTION_NAME}" \
+            --zip-file fileb://dist/auth-api.zip
+          aws lambda wait function-updated \
+            --function-name "${AUTH_API_FUNCTION_NAME}"
+
+      - name: Deploy authorizer lambda code
+        run: |
+          set -euo pipefail
+          aws lambda update-function-code \
+            --function-name "${AUTHORIZER_FUNCTION_NAME}" \
+            --zip-file fileb://dist/authorizer.zip
+          aws lambda wait function-updated \
+            --function-name "${AUTHORIZER_FUNCTION_NAME}"
